@@ -1,0 +1,114 @@
+---
+title: "Week 9 – NYTimes Top Stories API (Technology)"
+author: "Kevin Martin"
+date: "10-26-2025"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    theme: readable
+---
+
+## 1) Overview
+
+**Purpose:** Call the NYTimes Top Stories API (technology), turn the JSON into a table, do quick checks, and note what we observe.  
+In short: **connect → request → parse → validate → observe**.
+
+```{r knitr}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r install_packages}
+# install.packages(c("httr2","jsonlite","dplyr","tidyr","readr"), dependencies = TRUE)
+
+library(httr2)
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(readr)
+```
+
+```{r NYT_API_KEY}
+# Set the key for this R session
+# Sys.setenv(NYT_API_KEY = "PASTE-YOUR-KEY-HERE-BEFORE-RUNNING")
+```
+
+```{r test}
+Sys.getenv("NYT_API_KEY")
+```
+
+```{r request}
+key <- Sys.getenv ("NYT_API_KEY")  
+stopifnot(nzchar(key)) 
+
+base <- "https://api.nytimes.com/svc/topstories/v2/technology.json"
+
+req <- httr2::request(base) |>
+  httr2::req_url_query(`api-key` = key)
+
+# Optional: preview the exact HTTP request (shows ?api-key=****)
+# httr2::req_dry_run(req)
+
+resp <- httr2::req_perform(req)
+
+# Quick response checks (should be OK / application/json)
+httr2::resp_status_desc(resp)
+httr2::resp_content_type(resp)
+```
+
+```{r results}
+raw <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+
+# shows "results" in the names:
+names(raw)
+
+articles <- tibble::as_tibble(raw$results) |>
+  dplyr::transmute(
+    section,
+    subsection,
+    title,
+    byline,
+    published_date = as.Date(published_date),
+    url,
+    abstract
+  )
+
+dplyr::glimpse(articles)
+```
+
+```{r filter_to_technology}
+articles_tech <- articles %>%
+  dplyr::filter(section == "technology") %>%
+  dplyr::arrange(dplyr::desc(published_date))
+
+# quick peek
+head(articles_tech, 8)
+```
+
+
+```{r validation}
+# 1) expected columns exist
+stopifnot(all(c("title","url","published_date") %in% names(articles)))
+
+# 2) at least one row
+stopifnot(nrow(articles) > 0)
+
+# 3) no missing criticals
+stopifnot(!any(is.na(articles$title)))
+stopifnot(!any(is.na(articles$url)))
+
+# 4) date sanity (should be recent)
+range(articles$published_date, na.rm = TRUE)
+```
+
+```{r preview_save}
+head(articles_tech, 8)
+# Optional save:
+# readr::write_csv(articles_tech, "nyt_topstories_technology.csv")
+```
+
+## 8) Findings
+
+- Most recent tech headlines focus on AI in higher ed, big-tech layoffs, and crypto enforcement from the last few days.  
+- Dates cluster within the past week, which fits a “Top Stories” feed.  
+- (If you used the filter) I filtered to `section == "technology"` to keep the analysis on-topic.
